@@ -1,5 +1,5 @@
 // apps/web/scripts/seed.cjs
-// Idempotent seed for demo data (11 pilots) with uniqueness to avoid duplicates.
+// Idempotent seed for OPL demo data + per-pilot 1‑page PDF links in /public/docs/<ref>.pdf
 
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
@@ -15,7 +15,6 @@ const ORGS = [
 ];
 
 const PILOTS = [
-  // Existing exemplar
   {
     ref: "CLIM-2025-001",
     title: "AI-Enabled Pasture Management for Drought Resilience",
@@ -37,7 +36,6 @@ const PILOTS = [
     ],
   },
 
-  // Climate Positive (in-progress)
   {
     ref: "CLIM-2025-002",
     title: "Low‑Emissions Cold Chain for Regional Meat Exports",
@@ -59,7 +57,6 @@ const PILOTS = [
     ],
   },
 
-  // Care at Edge (completed)
   {
     ref: "CARE-2025-003",
     title: "In‑Home Telehealth Cart for Rural Aged Care",
@@ -81,7 +78,7 @@ const PILOTS = [
     ],
   },
 
-  // Care at Edge (planned, unpublished)
+  // Planned (unpublished)
   {
     ref: "CARE-2025-004",
     title: "Falls‑Risk Computer Vision in Community Housing",
@@ -100,7 +97,6 @@ const PILOTS = [
     kpis: [["Fall incidents reduction", "-25%", null]],
   },
 
-  // Sovereign Agri (in-progress)
   {
     ref: "SOV-2025-005",
     title: "On‑Farm Spectroscopy for Grain Quality Assurance",
@@ -122,7 +118,6 @@ const PILOTS = [
     ],
   },
 
-  // Sovereign Agri (terminated)
   {
     ref: "SOV-2025-006",
     title: "Blockchain Cattle Provenance Trial",
@@ -141,7 +136,6 @@ const PILOTS = [
     kpis: [["Onboarding time per lot", "-40%", "-5%"]],
   },
 
-  // Resilient Towns (in-progress)
   {
     ref: "RES-2025-007",
     title: "Community Microgrid with Peer‑to‑Peer Trading",
@@ -163,7 +157,7 @@ const PILOTS = [
     ],
   },
 
-  // Resilient Towns (planned, unpublished)
+  // Planned (unpublished)
   {
     ref: "RES-2025-008",
     title: "Flood Early‑Warning Sensors for Bridge Approaches",
@@ -182,7 +176,6 @@ const PILOTS = [
     kpis: [["Unplanned closures reduced", "-30%", null]],
   },
 
-  // Care at Edge (in-progress)
   {
     ref: "CARE-2025-009",
     title: "Remote Cognitive Rehab Using Mixed Reality",
@@ -204,7 +197,6 @@ const PILOTS = [
     ],
   },
 
-  // Sovereign Agri (in-progress)
   {
     ref: "SOV-2025-010",
     title: "Edge‑AI Weed Detection for Broadacre Spraying",
@@ -226,7 +218,7 @@ const PILOTS = [
     ],
   },
 
-  // Climate Positive (planned, unpublished)
+  // Planned (unpublished)
   {
     ref: "CLIM-2025-011",
     title: "Circular Packaging for Regional Food SMEs",
@@ -246,10 +238,9 @@ const PILOTS = [
   },
 ];
 
-// ---------- helpers ----------
+// ---------------- helpers ----------------
 
 async function upsertOrg({ name, abn }) {
-  // name is unique in schema (also abn unique if present)
   const where = abn ? { abn } : { name };
   return prisma.organisation.upsert({
     where,
@@ -303,7 +294,7 @@ async function seedPilot(p) {
     },
   });
 
-  // Sites (idempotent via deterministic id)
+  // Sites (deterministic ids, idempotent)
   for (const town of p.sites || []) {
     const sid = `${pilot.id}:${town}`;
     await prisma.site.upsert({
@@ -319,23 +310,23 @@ async function seedPilot(p) {
     });
   }
 
-  // KPIs & Outcomes (idempotent via unique constraints)
+  // KPIs & Outcomes (unique per pilot + per kpi)
   for (const [name, target, achieved] of p.kpis || []) {
     const k = await prisma.kPI.upsert({
-      where: { pilotId_name: { pilotId: pilot.id, name } },
+      where: { pilotId_name: { pilotId: pilot.id, name } }, // @@unique([pilotId, name])
       update: { target },
       create: { pilotId: pilot.id, name, target, publicHeadline: true },
     });
     if (achieved != null) {
       await prisma.kPIOutcome.upsert({
-        where: { kpiId: k.id },
+        where: { kpiId: k.id }, // @@unique([kpiId])
         update: { achieved },
         create: { pilotId: pilot.id, kpiId: k.id, achieved },
       });
     }
   }
 
-  // Funding (idempotent)
+  // Funding (skipDuplicates via @@unique([pilotId, source]))
   if (p.totalBudget) {
     const third = Math.floor(p.totalBudget / 3);
     await prisma.funding.createMany({
@@ -348,19 +339,19 @@ async function seedPilot(p) {
     });
   }
 
-  // Docs (idempotent)
+  // Public doc: 1‑page overview PDF served from /public/docs/<ref>.pdf
   await prisma.docLink.upsert({
-    where: { pilotId_label: { pilotId: pilot.id, label: "Pilot One‑Pager" } },
-    update: { url: "https://example.org/one-pager.pdf", public: true },
+    where: { pilotId_label: { pilotId: pilot.id, label: "Project Overview (PDF)" } }, // @@unique([pilotId, label])
+    update: { url: `/docs/${p.ref}.pdf`, public: true },
     create: {
       pilotId: pilot.id,
-      label: "Pilot One‑Pager",
-      url: "https://example.org/one-pager.pdf",
+      label: "Project Overview (PDF)",
+      url: `/docs/${p.ref}.pdf`,
       public: true,
     },
   });
 
-  // Log (single “init” log; idempotent via deterministic id)
+  // Init log (deterministic id)
   const logId = `${pilot.id}:init`;
   await prisma.logEntry.upsert({
     where: { id: logId },
@@ -387,7 +378,7 @@ async function seedPilot(p) {
   return pilot;
 }
 
-// ---------- run ----------
+// ---------------- run ----------------
 (async () => {
   await Promise.all(ORGS.map(upsertOrg));
   for (const p of PILOTS) {
