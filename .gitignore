@@ -1,0 +1,10 @@
+# Node/Next
+.next
+node_modules
+dist
+.env*
+# Prisma
+prisma/*.db
+# OS
+.DS_Store
+*.log

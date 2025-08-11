@@ -1,0 +1,155 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum PilotStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  TERMINATED
+}
+
+enum Mission {
+  CLIMATE_POSITIVE
+  CARE_AT_EDGE
+  SOVEREIGN_AGRI
+  RESILIENT_TOWNS
+}
+
+model Organisation {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  abn       String? @unique
+  pilotsLed Pilot[] @relation("OrgLead")
+  createdAt DateTime @default(now())
+}
+
+model Pilot {
+  id              String       @id @default(cuid())
+  ref             String       @unique
+  title           String
+  status          PilotStatus  @default(PLANNED)
+  mission         Mission
+  problemOwner    Organisation @relation("OrgLead", fields: [problemOwnerId], references: [id])
+  problemOwnerId  String
+  guildLead       String
+  summaryPublic   String
+  startDate       DateTime?
+  endDate         DateTime?
+  totalBudget     Int?
+  exportPotential Boolean      @default(false)
+  dataGovernanceNotes String?
+  commercialNotes String?
+  nextSteps       String?
+  visibilityPublic Boolean     @default(true)
+  publishedAt     DateTime?
+
+  sites           Site[]
+  kpis            KPI[]
+  outcomes        KPIOutcome[]
+  funding         Funding[]
+  logs            LogEntry[]
+  decisions       Decision[]
+  docs            DocLink[]
+  audit           AuditTrail[]
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Site {
+  id      String @id @default(cuid())
+  pilotId String
+  pilot   Pilot  @relation(fields: [pilotId], references: [id])
+  name    String
+  town    String
+  region  String?
+  lat     Float?
+  lng     Float?
+}
+
+model KPI {
+  id             String @id @default(cuid())
+  pilotId        String
+  pilot          Pilot  @relation(fields: [pilotId], references: [id])
+  name           String
+  publicHeadline Boolean @default(true)
+  definition     String?
+  baseline       String?
+  target         String?
+
+  outcomes       KPIOutcome[]  
+
+  @@unique([pilotId, name]) // prevent duplicate KPI names per pilot
+}
+
+model KPIOutcome {
+  id       String @id @default(cuid())
+  pilotId  String
+  pilot    Pilot  @relation(fields: [pilotId], references: [id])
+  kpiId    String?
+  kpi      KPI?   @relation(fields: [kpiId], references: [id])
+  achieved String?
+
+  @@unique([kpiId]) // one outcome row per KPI
+}
+
+model Funding {
+  id           String  @id @default(cuid())
+  pilotId      String
+  pilot        Pilot   @relation(fields: [pilotId], references: [id])
+  source       String
+  amountAud    Int?
+  confidential Boolean @default(false)
+
+  @@unique([pilotId, source]) // avoid duplicates per source
+}
+
+model Decision {
+  id           String   @id @default(cuid())
+  pilotId      String
+  pilot        Pilot    @relation(fields: [pilotId], references: [id])
+  date         DateTime
+  decisionType String
+  rationale    String
+  decidedBy    String[]
+  links        String[]
+}
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  pilotId   String
+  pilot     Pilot    @relation(fields: [pilotId], references: [id])
+  timestamp DateTime @default(now())
+  author    String
+  kind      String   // risk | issue | learning | update
+  body      String
+}
+
+model DocLink {
+  id      String @id @default(cuid())
+  pilotId String
+  pilot   Pilot  @relation(fields: [pilotId], references: [id])
+  label   String
+  url     String
+  public  Boolean @default(true)
+
+  @@unique([pilotId, label]) // one doc per label per pilot
+}
+
+model AuditTrail {
+  id       String   @id @default(cuid())
+  pilotId  String?
+  pilot    Pilot?   @relation(fields: [pilotId], references: [id]) // back relation
+  entity   String
+  entityId String
+  action   String   // INSERT | UPDATE | DELETE
+  userId   String?
+  diff     Json
+  at       DateTime @default(now())
+}
