@@ -1,30 +1,29 @@
-#!/usr/bin/env sh
-set -eu
+#!/bin/sh
+set -e
 
-cd /app
 echo "[start] PWD=$(pwd)"
-ls -la /app || true
+ls -al
 
-export HOST=0.0.0.0
-export HOSTNAME=0.0.0.0
-export PORT="${PORT:-3000}"
-echo "[start] Using HOST=$HOST PORT=$PORT"
+echo "[start] Using HOST=${HOST:-0.0.0.0} PORT=${PORT:-3000}"
+echo "[start] Checking Prisma schema at: ${PRISMA_SCHEMA_PATH:-apps/web/prisma/schema.prisma}"
 
-export PRISMA_SCHEMA_PATH="/app/apps/web/prisma/schema.prisma"
-echo "[start] Checking Prisma schema at: $PRISMA_SCHEMA_PATH"
-if [ ! -f "$PRISMA_SCHEMA_PATH" ]; then
-  echo "[start] ❌ Prisma schema missing. Listing dirs:"
-  ls -la /app/apps/web || true
-  ls -la /app/apps/web/prisma || true
+if [ ! -f "server.js" ]; then
+  echo "[start] Error: server.js not found!"
   exit 1
 fi
 
-node -e 'console.log("[start] server.js exists:", require("fs").existsSync("/app/server.js"))'
+echo "[start] server.js exists: true"
 
 echo "[start] Running prisma migrate deploy..."
-npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH" || true
-npx prisma db seed --schema=apps/web/prisma/schema.prisma
+npx prisma migrate deploy --schema "${PRISMA_SCHEMA_PATH:-apps/web/prisma/schema.prisma}"
 
+# Optional seed step (only runs if RUN_SEED=1 in Railway variables)
+if [ "${RUN_SEED:-0}" = "1" ]; then
+  echo "[start] Seeding database..."
+  npx prisma db seed --schema "${PRISMA_SCHEMA_PATH:-apps/web/prisma/schema.prisma}" || {
+    echo "[start] Warning: seeding failed but continuing startup..."
+  }
+fi
 
 echo "[start] Starting server.js..."
-exec node /app/server.js
+node /app/server.js
