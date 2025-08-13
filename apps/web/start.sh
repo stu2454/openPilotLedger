@@ -6,6 +6,10 @@ cd /app
 echo "[start] PWD=$(pwd)"
 ls -al || true
 
+# Prefer IPv4 resolution for localhost to avoid ::1 when server is IPv4-bound
+export NODE_OPTIONS="--dns-result-order=ipv4first"
+
+# Bind to all interfaces; use platform-injected PORT (fallback 3000 locally)
 export HOST="${HOST:-0.0.0.0}"
 export HOSTNAME="${HOSTNAME:-0.0.0.0}"
 export PORT="${PORT:-3000}"
@@ -22,7 +26,7 @@ else
   ls -al /app/apps/web/prisma 2>/dev/null || true
 fi
 
-# Optional seed once
+# Optional one-off seed (toggle via RUN_SEED=1)
 if [ "${RUN_SEED:-0}" = "1" ]; then
   echo "[start] Seeding database (direct)…"
   if [ -f "/app/apps/web/prisma/seed.cjs" ]; then
@@ -33,7 +37,7 @@ if [ "${RUN_SEED:-0}" = "1" ]; then
   fi
 fi
 
-# ---------- INTERNAL HEALTH SELF-CHECK (Node fetch; multiple hosts) ----------
+# --- INTERNAL HEALTH SELF-CHECK (now IPv4-first for localhost) ---
 echo "[start] Booting Next.js temporarily to test health endpoints…"
 node /app/server.js & 
 TMP_PID=$!
@@ -68,7 +72,7 @@ node -e "
 })().then(()=>process.exit(0)).catch(()=>process.exit(0));
 "
 kill "$TMP_PID" 2>/dev/null || true
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------
 
 echo "[start] Starting Next.js (PID 1)…"
 exec node /app/server.js
