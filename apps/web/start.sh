@@ -1,25 +1,28 @@
 #!/usr/bin/env sh
 set -eu
 
-# Always run from the app root (where server.js lives)
 cd /app
-
-echo "PWD=$(pwd)"
+echo "[start] PWD=$(pwd)"
 ls -la /app || true
 
-# Bind to all interfaces; use injected PORT (fallback 3000 for local runs)
 export HOST=0.0.0.0
 export HOSTNAME=0.0.0.0
 export PORT="${PORT:-3000}"
-echo "Using HOST=$HOST PORT=$PORT"
+echo "[start] Using HOST=$HOST PORT=$PORT"
 
-# Confirm the standalone server exists
-node -e 'console.log("server.js exists:", require("fs").existsSync("/app/server.js"))'
+export PRISMA_SCHEMA_PATH="/app/apps/web/prisma/schema.prisma"
+echo "[start] Checking Prisma schema at: $PRISMA_SCHEMA_PATH"
+if [ ! -f "$PRISMA_SCHEMA_PATH" ]; then
+  echo "[start] ❌ Prisma schema missing. Listing dirs:"
+  ls -la /app/apps/web || true
+  ls -la /app/apps/web/prisma || true
+  exit 1
+fi
 
-# Run migrations with explicit schema path (ignore 'no migrations' as success)
-echo "Running prisma migrate deploy..."
-npx prisma migrate deploy --schema /app/apps/web/prisma/schema.prisma || true
+node -e 'console.log("[start] server.js exists:", require("fs").existsSync("/app/server.js"))'
 
-echo "Starting server.js..."
-# IMPORTANT: run Node as PID 1 (foreground)
+echo "[start] Running prisma migrate deploy..."
+npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH" || true
+
+echo "[start] Starting server.js..."
 exec node /app/server.js
