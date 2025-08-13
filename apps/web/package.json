@@ -10,7 +10,7 @@
     "seed": "node scripts/seed.cjs"
   },
   "prisma": {
-    "seed": "node scripts/seed.cjs"
+    "seed": "node prisma/seed.cjs"
   },
   "dependencies": {
     "@prisma/client": "5.17.0",
