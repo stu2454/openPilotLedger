@@ -22,37 +22,52 @@ if [ -f "$PRISMA_SCHEMA_PATH" ]; then
   npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH" || true
 else
   echo "[start] ⚠️  Prisma schema missing at $PRISMA_SCHEMA_PATH (continuing without migrate)"
+  ls -al /app/apps/web/prisma 2>/dev/null || true
 fi
 
-# Optional one-off seed
+# Optional: one-off seed (toggle via RUN_SEED=1 in Railway Variables)
 if [ "${RUN_SEED:-0}" = "1" ]; then
   echo "[start] Seeding database (direct)…"
   if [ -f "/app/apps/web/prisma/seed.cjs" ]; then
     node /app/apps/web/prisma/seed.cjs || echo "[start] ⚠️  Seed script failed (continuing)"
   else
     echo "[start] ⚠️  Seed script not found at /app/apps/web/prisma/seed.cjs (skipping)"
+    ls -al /app/apps/web/prisma 2>/dev/null || true
   fi
 fi
 
-# --- INTERNAL HEALTH SELF-CHECK (for logs) ---
+# --- INTERNAL HEALTH SELF-CHECK (no wget/curl; use Node's fetch) ---
 echo "[start] Booting Next.js temporarily to test health endpoints…"
 node /app/server.js & 
 TMP_PID=$!
-# wait for the server to bind; try up to ~3s
+# wait up to ~3s for the server to bind
 for i in 1 2 3; do
   sleep 1
-  if wget -qO- "http://127.0.0.1:${PORT}/api/healthz" >/dev/null 2>&1; then break; fi
+  # quick TCP check using Node; break early if port responds
+  node -e "fetch('http://127.0.0.1:${PORT}/api/healthz').then(()=>process.exit(0)).catch(()=>process.exit(1))" && break || true
 done
 
 echo "[start] Health check inside container:"
-echo ">>> GET /api/healthz"
-wget -S -O- "http://127.0.0.1:${PORT}/api/healthz" || true
-echo
-echo ">>> GET /healthz.txt"
-wget -S -O- "http://127.0.0.1:${PORT}/healthz.txt" || true
-echo
+node -e "
+(async () => {
+  for (const path of ['/api/healthz','/healthz.txt']) {
+    const url = 'http://127.0.0.1:${PORT}' + path;
+    try {
+      const res = await fetch(url);
+      const text = await res.text();
+      console.log('>>> GET', path);
+      console.log('STATUS', res.status);
+      console.log(text);
+    } catch (e) {
+      console.log('>>> GET', path);
+      console.log('ERROR', e?.message || e);
+    }
+    console.log('');
+  }
+})().then(()=>process.exit(0)).catch(()=>process.exit(0));
+"
 kill "$TMP_PID" 2>/dev/null || true
-# ---------------------------------------------
+# ---------------------------------------------------------------
 
 echo "[start] Starting Next.js (PID 1)…"
 exec node /app/server.js
