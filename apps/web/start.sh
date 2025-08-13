@@ -19,26 +19,40 @@ echo "[start] Checking Prisma schema at: $PRISMA_SCHEMA_PATH"
 
 if [ -f "$PRISMA_SCHEMA_PATH" ]; then
   echo "[start] Running prisma migrate deploy..."
-  # OK if there are no migrations; do not fail startup on warnings
   npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH" || true
 else
   echo "[start] ⚠️  Prisma schema missing at $PRISMA_SCHEMA_PATH (continuing without migrate)"
-  echo "[start]     Listing /app/apps/web/prisma:"
-  ls -al /app/apps/web/prisma 2>/dev/null || true
 fi
 
-# Optional: one-off seed (toggle via RUN_SEED=1 in Railway Variables)
-# Run the seed script *directly* from its real path in the container.
+# Optional one-off seed
 if [ "${RUN_SEED:-0}" = "1" ]; then
   echo "[start] Seeding database (direct)…"
   if [ -f "/app/apps/web/prisma/seed.cjs" ]; then
     node /app/apps/web/prisma/seed.cjs || echo "[start] ⚠️  Seed script failed (continuing)"
   else
     echo "[start] ⚠️  Seed script not found at /app/apps/web/prisma/seed.cjs (skipping)"
-    ls -al /app/apps/web/prisma 2>/dev/null || true
   fi
 fi
 
-# Final start — run Node as PID 1
+# --- INTERNAL HEALTH SELF-CHECK (for logs) ---
+echo "[start] Booting Next.js temporarily to test health endpoints…"
+node /app/server.js & 
+TMP_PID=$!
+# wait for the server to bind; try up to ~3s
+for i in 1 2 3; do
+  sleep 1
+  if wget -qO- "http://127.0.0.1:${PORT}/api/healthz" >/dev/null 2>&1; then break; fi
+done
+
+echo "[start] Health check inside container:"
+echo ">>> GET /api/healthz"
+wget -S -O- "http://127.0.0.1:${PORT}/api/healthz" || true
+echo
+echo ">>> GET /healthz.txt"
+wget -S -O- "http://127.0.0.1:${PORT}/healthz.txt" || true
+echo
+kill "$TMP_PID" 2>/dev/null || true
+# ---------------------------------------------
+
 echo "[start] Starting Next.js (PID 1)…"
 exec node /app/server.js
