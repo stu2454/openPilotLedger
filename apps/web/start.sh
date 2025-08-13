@@ -1,31 +1,24 @@
 #!/usr/bin/env sh
 set -eu
 
+# Always run from the app root (where server.js lives)
 cd /app
-echo "PWD=$(pwd)"
-ls -la /app
-node -e 'console.log("server.js exists:", require("fs").existsSync("/app/server.js"))'
-echo "PORT=${PORT:-3000}"
 
-# Make sure we bind to all interfaces (cover both env names)
+echo "PWD=$(pwd)"
+ls -la /app || true
+
+# Make sure Next binds to all interfaces and to the expected port
 export HOST=0.0.0.0
 export HOSTNAME=0.0.0.0
+export PORT=8080
 
-# Prisma migrate (ignore 'no migrations' as success)
+# Confirm the standalone server exists
+node -e 'console.log("server.js exists:", require("fs").existsSync("/app/server.js"))'
+
+# Run migrations (ok if there are none)
+echo "Running prisma migrate deploy..."
 npx prisma migrate deploy --schema /app/apps/web/prisma/schema.prisma || true
 
-echo "Listing compiled health route (if present):"
-ls -la /app/.next/server/app/healthz || true
-
-echo "Starting server.js..."
-node /app/server.js &
-
-# Give the server a moment to boot
-sleep 1
-
-echo "Curling healthz locally..."
-# Print HTTP status and body from inside the container
-wget -S -O- "http://127.0.0.1:${PORT:-3000}/healthz" || true
-
-# Keep PID 1 as node (replace the shell) once above checks have run
-exec tail -f /dev/null
+echo "Starting server.js on HOST=$HOST PORT=$PORT ..."
+# IMPORTANT: run as PID 1 (no backgrounding; no 'tail -f')
+exec node /app/server.js
