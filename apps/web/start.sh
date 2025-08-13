@@ -23,6 +23,8 @@ node -e 'console.log("[start] server.js exists:", require("fs").existsSync("/app
 
 echo "[start] Running prisma migrate deploy..."
 npx prisma migrate deploy --schema "$PRISMA_SCHEMA_PATH" || true
+npx prisma db seed --schema=apps/web/prisma/schema.prisma
+
 
 echo "[start] Starting server.js..."
 exec node /app/server.js
