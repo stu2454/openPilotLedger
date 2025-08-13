@@ -10,8 +10,8 @@ ls -la /app || true
 # Make sure Next binds to all interfaces and to the expected port
 export HOST=0.0.0.0
 export HOSTNAME=0.0.0.0
-export PORT=8080
-
+export PORT="${PORT:-3000}"
+echo "Using HOST=$HOST PORT=$PORT"
 # Confirm the standalone server exists
 node -e 'console.log("server.js exists:", require("fs").existsSync("/app/server.js"))'
 

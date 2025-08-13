@@ -37,5 +37,6 @@ RUN chmod +x /app/start.sh
 
 EXPOSE 3000
 
+
 # JSON-form CMD to forward signals properly
 CMD ["sh", "-lc", "npx prisma migrate deploy && node server.js"]
