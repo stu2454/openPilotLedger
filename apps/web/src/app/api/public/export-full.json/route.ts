@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET() {
   const pilots = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM public_api.v_pilots ORDER BY "publishedAt" DESC`);

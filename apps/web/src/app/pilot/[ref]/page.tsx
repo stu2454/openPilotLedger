@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import * as Tooltip from "@radix-ui/react-tooltip";
 
+/** --------------------------- URL & Data --------------------------- */
+
 function getBaseUrl() {
   if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
   const h = headers();
@@ -19,6 +21,7 @@ async function getData(ref: string) {
 }
 
 /** --------------------------- KPI helpers --------------------------- */
+
 type CompareKind = "gte" | "lte" | "pos" | "neg";
 type UnitKind = "percent" | "absolute";
 type Parsed = { kind: CompareKind; value: number; unit: UnitKind; raw: string } | null;
@@ -53,28 +56,36 @@ function parseTarget(raw?: string | null): Parsed {
   return { kind: "gte", value: v, unit, raw: s };
 }
 
-function meetsTarget(target: Parsed, achievedNum: number) {
+/** Compare achieved value against the target threshold */
+function meetsTarget(target: Exclude<Parsed, null>, achievedNum: number) {
   const { kind, value: t } = target;
   const a = achievedNum;
 
-  if (kind === "gte") return a >= t;
-  if (kind === "lte") return a <= t;
-  if (kind === "pos") return a >= t;
-  return a <= t;
+  // Treat 'pos' as "higher is better" and 'neg' as "lower is better"
+  if (kind === "gte" || kind === "pos") return a >= t;
+  if (kind === "lte" || kind === "neg") return a <= t;
+
+  // Fallback (shouldn't occur with current ParseKind)
+  return false;
 }
 
-function progressRatio(target: Parsed, achievedNum: number) {
+/** How far along you are toward the target (1 = at/over target for gte/pos) */
+function progressRatio(target: Exclude<Parsed, null>, achievedNum: number) {
   const { kind, value: t } = target;
   const a = achievedNum;
 
-  if (kind === "gte" || kind === "pos") return a / t;
-  if (kind === "lte") return t / (a === 0 ? 1e-9 : a);
-  return a / t;
+  // Guard against divide-by-zero
+  const safeT = t === 0 ? 1e-9 : t;
+
+  if (kind === "gte" || kind === "pos") return a / safeT;
+  if (kind === "lte" || kind === "neg") return (safeT - a) / safeT;
+
+  return 0;
 }
 
 type State = "met" | "on" | "off" | "na";
 
-function decideState(target: Parsed | null, achievedRaw?: string | null) {
+function decideState(target: Parsed, achievedRaw?: string | null) {
   if (!target) return { state: "na" as State, ratioPct: 0, tip: "No target available." };
 
   const aNum = numFrom(achievedRaw ?? "");
@@ -94,7 +105,8 @@ function decideState(target: Parsed | null, achievedRaw?: string | null) {
     };
   }
 
-  if (target.kind === "gte" || target.kind === "lte") {
+  // For directional targets, use margins; otherwise use a generic ratio rule
+  if (target.kind === "gte" || target.kind === "lte" || target.kind === "pos" || target.kind === "neg") {
     if (target.unit === "percent") {
       const marginPP = Math.abs(aNum - target.value);
       if (marginPP <= ONTRACK_MARGIN_PP) {
@@ -211,6 +223,8 @@ function ProgressRow({
     </li>
   );
 }
+
+/** --------------------------- Page --------------------------- */
 
 export default async function PilotPage({ params }: { params: { ref: string } }) {
   const data = await getData(params.ref);
