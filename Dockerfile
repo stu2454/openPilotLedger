@@ -32,6 +32,9 @@ COPY --from=build /app/apps/web/public ./apps/web/public
 # Prisma schema handy for migrate deploy
 COPY --from=build /app/apps/web/prisma ./apps/web/prisma
 
+COPY apps/web/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 EXPOSE 3000
 
 # JSON-form CMD to forward signals properly
